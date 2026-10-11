@@ -1,5 +1,6 @@
 # App Chasse — squelette (authentification + Supabase)
 
+
 Premier squelette fonctionnel de l'app : une page de connexion/inscription
 branchée sur la vraie base de données Supabase, pour valider que tout
 communique correctement avant de construire les écrans réels (battues,
