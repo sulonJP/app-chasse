@@ -1,0 +1,41 @@
+:root {
+  --bg: #f4f1ea;
+  --panel: #fffdf8;
+  --ink: #2b2418;
+  --ink-soft: #6b6152;
+  --accent: #5b7a4d;
+  --accent-dark: #3f5a35;
+  --line: #ddd5c3;
+  --warn: #c1502e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #1c1a15;
+    --panel: #262319;
+    --ink: #f0ece0;
+    --ink-soft: #b7ac96;
+    --line: #3a3527;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+input, button {
+  font-family: inherit;
+}
