@@ -107,3 +107,19 @@
   font-weight: 700;
   margin: 0 auto 10px;
 }
+
+.carte.large { max-width: 520px; }
+.h2 { font-size: 1.1rem; margin: 8px 0 6px; }
+.h3 { font-size: 0.95rem; margin: 16px 0 8px; }
+.liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ligne-bouton { width: 100%; display: flex; justify-content: space-between; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 0.95rem; color: var(--ink); cursor: pointer; }
+.bloc { border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin-bottom: 12px; background: var(--bg); }
+.bloc-titre { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.quota { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.9rem; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+.rangee { display: flex; gap: 8px; align-items: center; }
+.rangee input, .rangee select, .bloc select { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 0.9rem; color: var(--ink); min-width: 0; flex: 1; }
+.case { display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap; }
+.case input { flex: none; }
+.bouton-petit { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 12px; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.lien-mini { background: none; border: none; color: var(--warn); font-size: 0.78rem; cursor: pointer; }
+.bloc .champ-groupe { margin-top: 8px; gap: 8px; }

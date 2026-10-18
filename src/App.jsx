@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
+import GererChasse from './GererChasse'
 import './App.css'
 
 export default function App() {
@@ -65,16 +66,16 @@ export default function App() {
   }
 
   return (
-    <CentreEcran>
-      <EcranConnecte profile={profile} />
+    <CentreEcran large>
+      <EcranConnecte profile={profile} userId={session.user.id} />
     </CentreEcran>
   )
 }
 
-function CentreEcran({ children }) {
+function CentreEcran({ children, large }) {
   return (
     <div className="centre-ecran">
-      <div className="carte">{children}</div>
+      <div className={large ? 'carte large' : 'carte'}>{children}</div>
     </div>
   )
 }
@@ -206,23 +207,18 @@ function FormulaireProfil({ userId, email, onCree }) {
   )
 }
 
-function EcranConnecte({ profile }) {
+function EcranConnecte({ profile, userId }) {
   async function seDeconnecter() {
     await supabase.auth.signOut()
   }
 
   return (
     <>
-      <div className="avatar">
-        {(profile.prenom?.[0] ?? '?') + (profile.nom?.[0] ?? '')}
-      </div>
-      <h1 className="titre" style={{ textAlign: 'center' }}>
-        {profile.prenom} {profile.nom}
-      </h1>
-      <p className="message info" style={{ textAlign: 'center' }}>
-        ✓ Connecté — la base de données répond correctement.
+      <p className="message info" style={{ marginBottom: 8 }}>
+        Connecté : {profile.prenom} {profile.nom}
       </p>
-      <button type="button" className="bouton-principal" onClick={seDeconnecter}>
+      <GererChasse userId={userId} />
+      <button type="button" className="lien" onClick={seDeconnecter}>
         Se déconnecter
       </button>
     </>

@@ -1,6 +1,5 @@
 # App Chasse — squelette (authentification + Supabase)
 
-
 Premier squelette fonctionnel de l'app : une page de connexion/inscription
 branchée sur la vraie base de données Supabase, pour valider que tout
 communique correctement avant de construire les écrans réels (battues,
@@ -48,13 +47,11 @@ il suffira de les re-déposer dans GitHub (section "Add file" → "Upload
 files" sur le dépôt) — Vercel redéploie automatiquement à chaque mise à
 jour du dépôt.
 
-## Important : sécurité de la base de données
+## Sécurité de la base de données
 
-Ce squelette fonctionne, mais la base de données Supabase n'a pas encore
-de règles de sécurité (Row Level Security) : actuellement, n'importe qui
-connaissant l'URL et la clé publique pourrait lire/modifier les données.
-C'est volontaire pour ce premier test — on mettra ces règles en place
-avant d'y stocker de vraies données de chasse.
+Les règles de sécurité (Row Level Security) sont activées : chaque
+utilisateur ne voit que ses données et ses chasses. Les scripts sont dans
+`rls-chasses.sql` (à exécuter dans Supabase > SQL Editor).
 
 ## Développer en local (optionnel, si le Terminal fonctionne bien un jour)
 
