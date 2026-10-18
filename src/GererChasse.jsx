@@ -3,8 +3,15 @@ import { supabase } from './supabaseClient'
 
 const SAISON = '2026-2027'
 
-// Liste d'exemples ; la liste officielle par conseil sera précisée plus tard.
-const GIBIERS = ['Sanglier', 'Grand cerf', 'Biche', 'Chevreuil', 'Daim', 'Mouflon', 'Renard']
+// Liste officielle du gros gibier (Wallonie), par espèce et catégorie précise.
+const GROUPES = [
+  ['Cervidés', ['Grand cerf', 'Petit cerf', 'Biche', 'Bichette', 'Faon de cerf']],
+  ['Chevreuils', ['Brocard', 'Chèvre', 'Chevrette', 'Chevrillard', 'Faon de chevreuil']],
+  ['Daims', ['Daim', 'Daine', 'Faon de daim']],
+  ['Mouflons', ['Bélier', 'Brebis', 'Agneau']],
+  ['Sangliers', ['Verrat', 'Laie', 'Bête de compagnie', 'Bête rousse', 'Marcassin']],
+]
+const GIBIERS = GROUPES.flatMap(([, liste]) => liste)
 
 export default function GererChasse({ userId }) {
   const [chasses, setChasses] = useState([])
@@ -183,7 +190,11 @@ function BlocConseil({ conseil, quotas, recharger, supprimer, setErreur }) {
       <form onSubmit={ajouterQuota} className="champ-groupe">
         <div className="rangee">
           <select value={gibier} onChange={(e) => setGibier(e.target.value)}>
-            {GIBIERS.map((g) => <option key={g}>{g}</option>)}
+            {GROUPES.map(([titre, liste]) => (
+              <optgroup key={titre} label={titre}>
+                {liste.map((g) => <option key={g}>{g}</option>)}
+              </optgroup>
+            ))}
             <option value="__autre">Autre…</option>
           </select>
           {gibier === '__autre' && (
