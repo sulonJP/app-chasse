@@ -11,7 +11,7 @@ const GROUPES = [
   ['Mouflons', ['Bélier', 'Brebis', 'Agneau']],
   ['Sangliers', ['Verrat', 'Laie', 'Bête de compagnie', 'Bête rousse', 'Marcassin']],
 ]
-const GIBIERS = GROUPES.flatMap(([, liste]) => liste)
+const GIBIERS = [`${GROUPES[0][0]} (tous)`]
 
 export default function GererChasse({ userId }) {
   const [chasses, setChasses] = useState([])
@@ -192,6 +192,7 @@ function BlocConseil({ conseil, quotas, recharger, supprimer, setErreur }) {
           <select value={gibier} onChange={(e) => setGibier(e.target.value)}>
             {GROUPES.map(([titre, liste]) => (
               <optgroup key={titre} label={titre}>
+                <option value={`${titre} (tous)`}>{titre} — tous (sans détail)</option>
                 {liste.map((g) => <option key={g}>{g}</option>)}
               </optgroup>
             ))}
