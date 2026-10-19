@@ -74,7 +74,7 @@ export default function GererChasse({ userId }) {
   )
 }
 
-function DetailChasse({ chasse, retour }) {
+function DetailChasse({ chasse, userId, retour }) {
   const [conseils, setConseils] = useState([])
   const [quotas, setQuotas] = useState([])
   const [nomConseil, setNomConseil] = useState('')
@@ -117,6 +117,8 @@ function DetailChasse({ chasse, retour }) {
       </button>
       <h2 className="h2">{chasse.nom}</h2>
       <p className="message">Saison {SAISON}</p>
+
+      <Membres chasseId={chasse.id} userId={userId} />
 
       <h3 className="h3">Conseils cynégétiques</h3>
       {conseils.length === 0 && <p className="message">Aucun conseil. Ajoute-en un ci-dessous.</p>}
@@ -212,6 +214,88 @@ function BlocConseil({ conseil, quotas, recharger, supprimer, setErreur }) {
           <button type="submit" className="bouton-petit">+ Quota</button>
         </div>
       </form>
+    </div>
+  )
+}
+
+function Membres({ chasseId, userId }) {
+  const [membres, setMembres] = useState([])
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState('chasseur')
+  const [erreur, setErreur] = useState('')
+  const [info, setInfo] = useState('')
+
+  const charger = useCallback(async () => {
+    const { data, error } = await supabase.rpc('liste_membres', { p_chasse: chasseId })
+    if (error) return setErreur(error.message)
+    setMembres(data)
+  }, [chasseId])
+
+  useEffect(() => { charger() }, [charger])
+
+  const moi = membres.find((m) => m.user_id === userId && m.role === 'organisateur')
+  const estOrganisateur = !!moi
+  const estPrincipal = !!moi?.est_principal
+
+  async function ajouter(e) {
+    e.preventDefault()
+    setErreur(''); setInfo('')
+    if (!email.trim()) return
+    const { error } = await supabase.rpc('ajouter_membre', { p_chasse: chasseId, p_email: email.trim(), p_role: role })
+    if (error) return setErreur(error.message)
+    setEmail('')
+    setInfo('Ajouté ✓')
+    charger()
+  }
+
+  async function retirer(m) {
+    if (!window.confirm(`Retirer ${m.prenom} ${m.nom} ?`)) return
+    setErreur(''); setInfo('')
+    const { error } = await supabase.rpc('retirer_membre', { p_chasse: chasseId, p_user: m.user_id, p_role: m.role })
+    if (error) return setErreur(error.message)
+    charger()
+  }
+
+  const peutRetirer = (m) => estOrganisateur && !m.est_principal && (m.role === 'chasseur' || estPrincipal)
+
+  const groupe = (titre, r) => (
+    <>
+      <h3 className="h3">{titre}</h3>
+      <ul className="liste">
+        {membres.filter((m) => m.role === r).map((m) => (
+          <li key={m.user_id + m.role} className="quota">
+            <span>
+              {m.prenom} {m.nom}{m.est_principal ? ' ★ principal' : ''}
+              {m.email && <small style={{ display: 'block', opacity: 0.7 }}>{m.email}</small>}
+            </span>
+            {peutRetirer(m) && (
+              <button type="button" className="lien-mini" onClick={() => retirer(m)}>Retirer</button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </>
+  )
+
+  return (
+    <div>
+      {groupe('Organisateurs', 'organisateur')}
+      {groupe('Chasseurs habituels', 'chasseur')}
+      {estOrganisateur && (
+        <form onSubmit={ajouter} className="champ-groupe" style={{ marginTop: 10 }}>
+          <div className="rangee">
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email de la personne" />
+            <select value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="chasseur">Chasseur</option>
+              {estPrincipal && <option value="organisateur">Organisateur</option>}
+            </select>
+            <button type="submit" className="bouton-petit">+ Ajouter</button>
+          </div>
+          <p className="message">La personne doit d'abord avoir créé son compte dans l'app.</p>
+        </form>
+      )}
+      {info && <p className="message info">{info}</p>}
+      {erreur && <p className="message erreur">{erreur}</p>}
     </div>
   )
 }
