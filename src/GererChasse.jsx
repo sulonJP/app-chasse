@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
+import PostesChasse from './PostesChasse'
 
 const SAISON = '2026-2027'
 
@@ -79,6 +80,12 @@ function DetailChasse({ chasse, userId, retour }) {
   const [quotas, setQuotas] = useState([])
   const [nomConseil, setNomConseil] = useState('')
   const [erreur, setErreur] = useState('')
+  const [estOrg, setEstOrg] = useState(false)
+
+  useEffect(() => {
+    supabase.from('chasse_membres').select('role').eq('chasse_id', chasse.id).eq('user_id', userId)
+      .then(({ data }) => setEstOrg(!!data?.some((m) => m.role === 'organisateur')))
+  }, [chasse.id, userId])
 
   const charger = useCallback(async () => {
     const c = await supabase.from('conseils_cynegetiques').select('*').eq('chasse_id', chasse.id).order('nom')
@@ -136,6 +143,7 @@ function DetailChasse({ chasse, userId, retour }) {
         <input value={nomConseil} onChange={(e) => setNomConseil(e.target.value)} placeholder="Ex. Conseil Cynégétique Est" />
         <button type="submit" className="bouton-petit">+ Conseil</button>
       </form>
+      <PostesChasse chasseId={chasse.id} conseils={conseils} peutModifier={estOrg} />
       {erreur && <p className="message erreur">{erreur}</p>}
     </div>
   )
