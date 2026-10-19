@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
-import PostesChasse from './PostesChasse'
+import BattuesChasse from './BattuesChasse'
 
 const SAISON = '2026-2027'
 
@@ -143,7 +143,7 @@ function DetailChasse({ chasse, userId, retour }) {
         <input value={nomConseil} onChange={(e) => setNomConseil(e.target.value)} placeholder="Ex. Conseil Cynégétique Est" />
         <button type="submit" className="bouton-petit">+ Conseil</button>
       </form>
-      <PostesChasse chasseId={chasse.id} conseils={conseils} peutModifier={estOrg} />
+      <BattuesChasse chasseId={chasse.id} conseils={conseils} peutModifier={estOrg} />
       {erreur && <p className="message erreur">{erreur}</p>}
     </div>
   )

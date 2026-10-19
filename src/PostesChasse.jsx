@@ -7,10 +7,11 @@ const num = (p) => {
 }
 
 // Liste fixe des postes d'une chasse, placés sur une vraie carte (OpenStreetMap via Leaflet).
-export default function PostesChasse({ chasseId, conseils, peutModifier }) {
+export default function PostesChasse({ battue, chasseId, conseils, peutModifier, majBattue }) {
   const [postes, setPostes] = useState([])
   const [selId, setSelId] = useState(null)
   const [ajout, setAjout] = useState(false)
+  const [trace, setTrace] = useState(null) // points de la zone en cours de tracé (ou null)
   const [erreur, setErreur] = useState('')
   const [de, setDe] = useState('')
   const [a, setA] = useState('')
@@ -22,19 +23,23 @@ export default function PostesChasse({ chasseId, conseils, peutModifier }) {
   const markersRef = useRef([])
   const moiRef = useRef(null)
   const ajoutRef = useRef(false)
+  const traceRef = useRef(null)
+  const zoneRef = useRef(null)
+  const apercuRef = useRef(null)
   const creerRef = useRef(null)
   const dejaCadre = useRef(false)
 
   const charger = useCallback(async () => {
-    const { data, error } = await supabase.from('postes').select('*').eq('chasse_id', chasseId).eq('fixe', true)
+    const { data, error } = await supabase.from('postes').select('*').eq('chasse_id', chasseId).eq('battue_id', battue.id)
     if (error) return setErreur(error.message)
     data.sort((x, y) => (num(x) ?? 9999) - (num(y) ?? 9999) || x.numero.localeCompare(y.numero))
     setPostes(data)
-  }, [chasseId])
+  }, [chasseId, battue.id])
 
   useEffect(() => { charger() }, [charger])
 
   useEffect(() => { ajoutRef.current = ajout }, [ajout])
+  useEffect(() => { traceRef.current = trace }, [trace])
 
   // Création de la carte (une seule fois).
   useEffect(() => {
@@ -45,7 +50,10 @@ export default function PostesChasse({ chasseId, conseils, peutModifier }) {
       maxZoom: 19,
       attribution: '© OpenStreetMap',
     }).addTo(map)
-    map.on('click', (e) => { if (ajoutRef.current && creerRef.current) creerRef.current(e.latlng) })
+    map.on('click', (e) => {
+      if (ajoutRef.current && creerRef.current) creerRef.current(e.latlng)
+      else if (traceRef.current) setTrace((t) => (t ? [...t, [e.latlng.lat, e.latlng.lng]] : t))
+    })
     mapRef.current = map
     return () => { map.remove(); mapRef.current = null }
   }, [])
@@ -56,6 +64,7 @@ export default function PostesChasse({ chasseId, conseils, peutModifier }) {
     const max = postes.reduce((m, p) => Math.max(m, num(p) ?? 0), 0)
     const { data, error } = await supabase.from('postes').insert({
       chasse_id: chasseId,
+      battue_id: battue.id,
       numero: String(max + 1),
       lat: latlng.lat,
       lng: latlng.lng,
@@ -81,6 +90,44 @@ export default function PostesChasse({ chasseId, conseils, peutModifier }) {
     if (error) return setErreur(error.message)
     setSelId(null)
     charger()
+  }
+
+  // Zone de la battue (polygone enregistré).
+  useEffect(() => {
+    const L = window.L
+    const map = mapRef.current
+    if (!L || !map) return
+    if (zoneRef.current) { zoneRef.current.remove(); zoneRef.current = null }
+    if (battue.zone_geojson) {
+      zoneRef.current = L.geoJSON(battue.zone_geojson, { style: { color: '#3f5a35', weight: 2, fillColor: '#5b7a4d', fillOpacity: 0.15 }, interactive: false }).addTo(map)
+      if (!dejaCadre.current) {
+        map.fitBounds(zoneRef.current.getBounds(), { padding: [20, 20] })
+        dejaCadre.current = true
+      }
+    }
+  }, [battue.zone_geojson])
+
+  // Aperçu de la zone en cours de tracé.
+  useEffect(() => {
+    const L = window.L
+    const map = mapRef.current
+    if (!L || !map) return
+    if (apercuRef.current) { apercuRef.current.remove(); apercuRef.current = null }
+    if (trace && trace.length > 0) {
+      const g = L.layerGroup()
+      L.polygon(trace, { color: '#c1502e', weight: 2, dashArray: '5 5', fillOpacity: 0.1, interactive: false }).addTo(g)
+      trace.forEach((pt) => L.circleMarker(pt, { radius: 4, color: '#c1502e', fillColor: '#fff', fillOpacity: 1, interactive: false }).addTo(g))
+      g.addTo(map)
+      apercuRef.current = g
+    }
+  }, [trace])
+
+  function validerZone() {
+    if (!trace || trace.length < 3) return setErreur('Place au moins 3 points pour fermer la zone.')
+    const ring = trace.map(([lat, lng]) => [lng, lat])
+    ring.push(ring[0])
+    majBattue({ zone_geojson: { type: 'Polygon', coordinates: [ring] } })
+    setTrace(null)
   }
 
   // Dessin des marqueurs à chaque changement de la liste.
@@ -163,17 +210,29 @@ export default function PostesChasse({ chasseId, conseils, peutModifier }) {
 
   return (
     <div>
-      <h3 className="h3">Mes postes</h3>
+      <h3 className="h3">Postes de cette battue</h3>
       <div className="rangee" style={{ marginBottom: 8 }}>
         {peutModifier && (
-          <button type="button" className="bouton-petit" onClick={() => setAjout(!ajout)}>
+          <button type="button" className="bouton-petit" onClick={() => { setTrace(null); setAjout(!ajout) }}>
             {ajout ? 'Terminé' : '+ Poste'}
           </button>
         )}
+        {peutModifier && !trace && (
+          <button type="button" className="bouton-petit" onClick={() => { setAjout(false); setTrace([]) }}>
+            ✏️ {battue.zone_geojson ? 'Retracer la zone' : 'Tracer la zone'}
+          </button>
+        )}
+        {peutModifier && trace && (
+          <>
+            <button type="button" className="bouton-petit" onClick={validerZone}>Valider la zone</button>
+            <button type="button" className="lien-mini" onClick={() => setTrace(null)}>Annuler</button>
+          </>
+        )}
         <button type="button" className="bouton-petit" onClick={seLocaliser}>📍 Me localiser</button>
       </div>
+      {trace && <p className="message info">Touche la carte pour poser les coins de la zone ({trace.length} point(s)), puis « Valider la zone ».</p>}
       {ajout && <p className="message info">Touche la carte pour placer chaque poste (numérotés à la suite). Appuie sur « Terminé » quand tu as fini.</p>}
-      <div ref={divRef} className={'carte-osm' + (ajout ? ' ajout' : '')} />
+      <div ref={divRef} className={'carte-osm' + (ajout || trace ? ' ajout' : '')} />
       <p className="message" style={{ marginTop: 4 }}>
         {postes.length} poste(s){peutModifier ? ' · glisse un numéro pour le déplacer' : ''}
       </p>
