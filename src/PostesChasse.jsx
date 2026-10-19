@@ -51,7 +51,8 @@ export default function PostesChasse({ chasseId, conseils, peutModifier }) {
   }, [])
 
   async function creerPoste(latlng) {
-    setAjout(false)
+    // On garde le mode « ajout » actif (pour enchaîner les postes) et on ne recadre plus la carte.
+    dejaCadre.current = true
     const max = postes.reduce((m, p) => Math.max(m, num(p) ?? 0), 0)
     const { data, error } = await supabase.from('postes').insert({
       chasse_id: chasseId,
@@ -117,18 +118,28 @@ export default function PostesChasse({ chasseId, conseils, peutModifier }) {
   function seLocaliser() {
     setErreur('')
     if (!navigator.geolocation) return setErreur('La géolocalisation n\'est pas disponible sur cet appareil.')
+    const afficher = (pos) => {
+      const L = window.L
+      const map = mapRef.current
+      if (!L || !map) return
+      const ll = [pos.coords.latitude, pos.coords.longitude]
+      if (moiRef.current) moiRef.current.remove()
+      moiRef.current = L.circleMarker(ll, { radius: 8, color: '#fff', weight: 2, fillColor: '#2a6fdb', fillOpacity: 1 }).addTo(map)
+      map.setView(ll, 16)
+    }
+    const echec = (err) => {
+      if (err.code === 1) setErreur('Localisation refusée : autorise-la pour ce site dans les réglages du navigateur (et de l\'appareil), puis recharge la page.')
+      else if (err.code === 3) setErreur('La localisation prend trop de temps : réessaie, de préférence à l\'extérieur.')
+      else setErreur('Position indisponible sur cet appareil (' + (err.message || 'inconnue') + '). Sur un ordinateur sans GPS, c\'est fréquent : essaie sur ton téléphone.')
+    }
+    // 1er essai précis (GPS), puis 2e essai moins précis (Wi-Fi/réseau) si ça échoue.
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const L = window.L
-        const map = mapRef.current
-        if (!L || !map) return
-        const ll = [pos.coords.latitude, pos.coords.longitude]
-        if (moiRef.current) moiRef.current.remove()
-        moiRef.current = L.circleMarker(ll, { radius: 8, color: '#fff', weight: 2, fillColor: '#2a6fdb', fillOpacity: 1 }).addTo(map)
-        map.setView(ll, 16)
+      afficher,
+      (err) => {
+        if (err.code === 1) return echec(err)
+        navigator.geolocation.getCurrentPosition(afficher, echec, { enableHighAccuracy: false, timeout: 20000, maximumAge: 60000 })
       },
-      () => setErreur('Position impossible à obtenir : autorise la localisation pour ce site.'),
-      { enableHighAccuracy: true, timeout: 15000 },
+      { enableHighAccuracy: true, timeout: 10000 },
     )
   }
 
@@ -156,12 +167,12 @@ export default function PostesChasse({ chasseId, conseils, peutModifier }) {
       <div className="rangee" style={{ marginBottom: 8 }}>
         {peutModifier && (
           <button type="button" className="bouton-petit" onClick={() => setAjout(!ajout)}>
-            {ajout ? 'Annuler' : '+ Poste'}
+            {ajout ? 'Terminé' : '+ Poste'}
           </button>
         )}
         <button type="button" className="bouton-petit" onClick={seLocaliser}>📍 Me localiser</button>
       </div>
-      {ajout && <p className="message info">Touche la carte à l'endroit du nouveau poste.</p>}
+      {ajout && <p className="message info">Touche la carte pour placer chaque poste (numérotés à la suite). Appuie sur « Terminé » quand tu as fini.</p>}
       <div ref={divRef} className={'carte-osm' + (ajout ? ' ajout' : '')} />
       <p className="message" style={{ marginTop: 4 }}>
         {postes.length} poste(s){peutModifier ? ' · glisse un numéro pour le déplacer' : ''}
