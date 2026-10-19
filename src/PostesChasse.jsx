@@ -7,7 +7,7 @@ const num = (p) => {
 }
 
 // Liste fixe des postes d'une chasse, placés sur une vraie carte (OpenStreetMap via Leaflet).
-export default function PostesChasse({ battue, chasseId, conseils, peutModifier, majBattue }) {
+export default function PostesChasse({ battue, chasseId, conseils, peutModifier, majBattue, zoneVoisine }) {
   const [postes, setPostes] = useState([])
   const [selId, setSelId] = useState(null)
   const [ajout, setAjout] = useState(false)
@@ -17,6 +17,7 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
   const [a, setA] = useState('')
   const [conseilA, setConseilA] = useState('')
   const [conseilB, setConseilB] = useState('')
+  const [recherche, setRecherche] = useState('')
 
   const divRef = useRef(null)
   const mapRef = useRef(null)
@@ -55,7 +56,14 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
       else if (traceRef.current) setTrace((t) => (t ? [...t, [e.latlng.lat, e.latlng.lng]] : t))
     })
     mapRef.current = map
-    return () => { map.remove(); mapRef.current = null }
+    // La carte s'est parfois créée avant que son cadre ait sa taille finale : on la remesure.
+    const t1 = setTimeout(() => map.invalidateSize(), 100)
+    const t2 = setTimeout(() => map.invalidateSize(), 600)
+    // Nouvelle battue sans zone : on commence là où se trouvent les autres battues.
+    if (!battue.zone_geojson && zoneVoisine) {
+      try { map.fitBounds(L.geoJSON(zoneVoisine).getBounds(), { padding: [20, 20], maxZoom: 15 }) } catch (e) { /* ignore */ }
+    }
+    return () => { clearTimeout(t1); clearTimeout(t2); map.remove(); mapRef.current = null }
   }, [])
 
   async function creerPoste(latlng) {
@@ -98,11 +106,17 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
     const map = mapRef.current
     if (!L || !map) return
     if (zoneRef.current) { zoneRef.current.remove(); zoneRef.current = null }
-    if (battue.zone_geojson) {
-      zoneRef.current = L.geoJSON(battue.zone_geojson, { style: { color: '#3f5a35', weight: 2, fillColor: '#5b7a4d', fillOpacity: 0.15 }, interactive: false }).addTo(map)
-      if (!dejaCadre.current) {
-        map.fitBounds(zoneRef.current.getBounds(), { padding: [20, 20] })
-        dejaCadre.current = true
+    let zone = battue.zone_geojson
+    if (typeof zone === 'string') { try { zone = JSON.parse(zone) } catch (e) { zone = null } }
+    if (zone) {
+      try {
+        zoneRef.current = L.geoJSON(zone, { style: { color: '#3f5a35', weight: 2, fillColor: '#5b7a4d', fillOpacity: 0.15 }, interactive: false }).addTo(map)
+        if (!dejaCadre.current) {
+          map.fitBounds(zoneRef.current.getBounds(), { padding: [40, 40], maxZoom: 17 })
+          dejaCadre.current = true
+        }
+      } catch (e) {
+        setErreur('Zone illisible : retrace-la.')
       }
     }
   }, [battue.zone_geojson])
@@ -126,6 +140,7 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
     if (!trace || trace.length < 3) return setErreur('Place au moins 3 points pour fermer la zone.')
     const ring = trace.map(([lat, lng]) => [lng, lat])
     ring.push(ring[0])
+    dejaCadre.current = true // on reste sur la vue actuelle, sans zoomer
     majBattue({ zone_geojson: { type: 'Polygon', coordinates: [ring] } })
     setTrace(null)
   }
@@ -156,11 +171,33 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
       pts.push([p.lat, p.lng])
     })
     if (!dejaCadre.current && pts.length > 0) {
-      map.fitBounds(pts, { padding: [30, 30], maxZoom: 16 })
+      map.fitBounds(pts, { padding: [40, 40], maxZoom: 17 })
       dejaCadre.current = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postes, selId, peutModifier])
+
+  function recentrer() {
+    const map = mapRef.current
+    if (!map) return
+    map.invalidateSize()
+    if (zoneRef.current) map.fitBounds(zoneRef.current.getBounds(), { padding: [40, 40], maxZoom: 17 })
+    else if (markersRef.current.length) map.fitBounds(markersRef.current.map((m) => m.getLatLng()), { padding: [40, 40], maxZoom: 17 })
+  }
+
+  async function chercherLieu(e) {
+    e.preventDefault()
+    setErreur('')
+    if (!recherche.trim()) return
+    try {
+      const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(recherche.trim()))
+      const d = await r.json()
+      if (!d.length) return setErreur('Lieu introuvable.')
+      mapRef.current.setView([parseFloat(d[0].lat), parseFloat(d[0].lon)], 14)
+    } catch (err) {
+      setErreur('Recherche impossible pour le moment.')
+    }
+  }
 
   function seLocaliser() {
     setErreur('')
@@ -211,7 +248,11 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
   return (
     <div>
       <h3 className="h3">Postes de cette battue</h3>
-      <div className="rangee" style={{ marginBottom: 8 }}>
+      <form onSubmit={chercherLieu} className="rangee" style={{ marginBottom: 8 }}>
+        <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Chercher un village, une adresse…" />
+        <button type="submit" className="bouton-petit">🔍</button>
+      </form>
+      <div className="rangee" style={{ marginBottom: 8, flexWrap: 'wrap' }}>
         {peutModifier && (
           <button type="button" className="bouton-petit" onClick={() => { setTrace(null); setAjout(!ajout) }}>
             {ajout ? 'Terminé' : '+ Poste'}
@@ -229,6 +270,7 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
           </>
         )}
         <button type="button" className="bouton-petit" onClick={seLocaliser}>📍 Me localiser</button>
+        <button type="button" className="bouton-petit" onClick={recentrer}>⤢ Recentrer</button>
       </div>
       {trace && <p className="message info">Touche la carte pour poser les coins de la zone ({trace.length} point(s)), puis « Valider la zone ».</p>}
       {ajout && <p className="message info">Touche la carte pour placer chaque poste (numérotés à la suite). Appuie sur « Terminé » quand tu as fini.</p>}

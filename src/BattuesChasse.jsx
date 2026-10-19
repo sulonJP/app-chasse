@@ -63,6 +63,7 @@ export default function BattuesChasse({ chasseId, conseils, peutModifier }) {
           conseils={conseils}
           peutModifier={peutModifier}
           majBattue={(patch) => majBattue(sel.id, patch)}
+          zoneVoisine={battues.find((b) => b.id !== sel.id && b.zone_geojson)?.zone_geojson}
         />
         {peutModifier && (
           <button type="button" className="lien-mini" style={{ marginTop: 12 }} onClick={() => supprimer(sel.id)}>
