@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabaseClient'
 
+const PALETTE = ['#d64545', '#2f6fd6', '#d98e00', '#8a4fd6', '#12908e', '#d6559a']
+function clair(hex) {
+  const n = parseInt(hex.slice(1), 16)
+  const m = (c) => Math.round(c + (255 - c) * 0.62)
+  return `rgb(${m((n >> 16) & 255)},${m((n >> 8) & 255)},${m(n & 255)})`
+}
+
 const num = (p) => {
   const n = parseInt(p.numero, 10)
   return Number.isNaN(n) ? null : n
@@ -18,12 +25,19 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
   const [conseilA, setConseilA] = useState('')
   const [conseilB, setConseilB] = useState('')
   const [recherche, setRecherche] = useState('')
+  const [parkings, setParkings] = useState([])
+  const [dessertes, setDessertes] = useState([])
+  const [selPark, setSelPark] = useState(null)
+  const [ajoutPark, setAjoutPark] = useState(false)
 
   const divRef = useRef(null)
   const mapRef = useRef(null)
   const markersRef = useRef([])
   const moiRef = useRef(null)
   const ajoutRef = useRef(false)
+  const ajoutParkRef = useRef(false)
+  const creerParkRef = useRef(null)
+  const markersParkRef = useRef([])
   const traceRef = useRef(null)
   const zoneRef = useRef(null)
   const apercuRef = useRef(null)
@@ -39,7 +53,20 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
 
   useEffect(() => { charger() }, [charger])
 
+  const chargerParkings = useCallback(async () => {
+    const { data, error } = await supabase.from('parkings').select('*').eq('battue_id', battue.id).order('nom')
+    if (error) return setErreur(error.message)
+    setParkings(data)
+    if (data.length === 0) return setDessertes([])
+    const r = await supabase.from('parking_postes_desservis').select('*').in('parking_id', data.map((k) => k.id))
+    if (r.error) return setErreur(r.error.message)
+    setDessertes(r.data)
+  }, [battue.id])
+
+  useEffect(() => { chargerParkings() }, [chargerParkings])
+
   useEffect(() => { ajoutRef.current = ajout }, [ajout])
+  useEffect(() => { ajoutParkRef.current = ajoutPark }, [ajoutPark])
   useEffect(() => { traceRef.current = trace }, [trace])
 
   // Création de la carte (une seule fois).
@@ -53,6 +80,7 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
     }).addTo(map)
     map.on('click', (e) => {
       if (ajoutRef.current && creerRef.current) creerRef.current(e.latlng)
+      else if (ajoutParkRef.current && creerParkRef.current) creerParkRef.current(e.latlng)
       else if (traceRef.current) setTrace((t) => (t ? [...t, [e.latlng.lat, e.latlng.lng]] : t))
     })
     mapRef.current = map
@@ -84,6 +112,50 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
     charger()
   }
   creerRef.current = creerPoste
+
+  async function creerParking(latlng) {
+    dejaCadre.current = true
+    setAjoutPark(false)
+    const { data, error } = await supabase.from('parkings').insert({
+      battue_id: battue.id,
+      nom: `Parking ${parkings.length + 1}`,
+      lat: latlng.lat,
+      lng: latlng.lng,
+      couleur: PALETTE[parkings.length % PALETTE.length],
+    }).select().single()
+    if (error) return setErreur(error.message)
+    setSelId(null)
+    setSelPark(data.id)
+    chargerParkings()
+  }
+  creerParkRef.current = creerParking
+
+  async function majParking(id, patch) {
+    setErreur('')
+    const { error } = await supabase.from('parkings').update(patch).eq('id', id)
+    if (error) return setErreur(error.message)
+    chargerParkings()
+  }
+
+  async function supprimerParking(id) {
+    if (!window.confirm('Supprimer ce parking ?')) return
+    const { error } = await supabase.from('parkings').delete().eq('id', id)
+    if (error) return setErreur(error.message)
+    setSelPark(null)
+    chargerParkings()
+  }
+
+  // Un poste n'est desservi que par un seul parking : on retire l'ancienne desserte avant d'ajouter la nouvelle.
+  async function basculerDesserte(parkingId, posteId, actif) {
+    setErreur('')
+    let r = await supabase.from('parking_postes_desservis').delete().eq('poste_id', posteId)
+    if (r.error) return setErreur(r.error.message)
+    if (actif) {
+      r = await supabase.from('parking_postes_desservis').insert({ parking_id: parkingId, poste_id: posteId })
+      if (r.error) return setErreur(r.error.message)
+    }
+    chargerParkings()
+  }
 
   async function maj(id, patch) {
     setErreur('')
@@ -158,11 +230,16 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
       const el = document.createElement('div')
       el.className = 'pin' + (p.id === selId ? ' sel' : '')
       el.textContent = p.numero
+      if (p.id !== selId) {
+        const d = dessertes.find((x) => x.poste_id === p.id)
+        const k = d && parkings.find((x) => x.id === d.parking_id)
+        if (k?.couleur) { el.style.background = clair(k.couleur); el.style.borderColor = k.couleur; el.style.color = '#222' }
+      }
       const marker = L.marker([p.lat, p.lng], {
         icon: L.divIcon({ className: '', html: el, iconSize: [30, 30], iconAnchor: [15, 15] }),
         draggable: peutModifier,
       }).addTo(map)
-      marker.on('click', () => setSelId(p.id))
+      marker.on('click', () => { setSelPark(null); setSelId(p.id) })
       marker.on('dragend', () => {
         const ll = marker.getLatLng()
         maj(p.id, { lat: ll.lat, lng: ll.lng })
@@ -175,7 +252,35 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
       dejaCadre.current = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [postes, selId, peutModifier])
+  }, [postes, selId, peutModifier, parkings, dessertes])
+
+  // Marqueurs des parkings (carrés avec un P, couleur propre à chaque parking).
+  useEffect(() => {
+    const L = window.L
+    const map = mapRef.current
+    if (!L || !map) return
+    markersParkRef.current.forEach((m) => m.remove())
+    markersParkRef.current = []
+    parkings.forEach((k) => {
+      if (k.lat == null || k.lng == null) return
+      const el = document.createElement('div')
+      el.className = 'pin parking-pin' + (k.id === selPark ? ' sel' : '')
+      el.textContent = 'P'
+      if (k.id !== selPark && k.couleur) { el.style.background = k.couleur }
+      const marker = L.marker([k.lat, k.lng], {
+        icon: L.divIcon({ className: '', html: el, iconSize: [30, 30], iconAnchor: [15, 15] }),
+        draggable: peutModifier,
+        zIndexOffset: 500,
+      }).addTo(map)
+      marker.on('click', () => { setSelId(null); setSelPark(k.id) })
+      marker.on('dragend', () => {
+        const ll = marker.getLatLng()
+        majParking(k.id, { lat: ll.lat, lng: ll.lng })
+      })
+      markersParkRef.current.push(marker)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parkings, selPark, peutModifier])
 
   function recentrer() {
     const map = mapRef.current
@@ -254,12 +359,17 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
       </form>
       <div className="rangee" style={{ marginBottom: 8, flexWrap: 'wrap' }}>
         {peutModifier && (
-          <button type="button" className="bouton-petit" onClick={() => { setTrace(null); setAjout(!ajout) }}>
+          <button type="button" className="bouton-petit" onClick={() => { setTrace(null); setAjoutPark(false); setAjout(!ajout) }}>
             {ajout ? 'Terminé' : '+ Poste'}
           </button>
         )}
+        {peutModifier && (
+          <button type="button" className="bouton-petit" onClick={() => { setTrace(null); setAjout(false); setAjoutPark(!ajoutPark) }}>
+            {ajoutPark ? 'Annuler' : '+ Parking'}
+          </button>
+        )}
         {peutModifier && !trace && (
-          <button type="button" className="bouton-petit" onClick={() => { setAjout(false); setTrace([]) }}>
+          <button type="button" className="bouton-petit" onClick={() => { setAjout(false); setAjoutPark(false); setTrace([]) }}>
             ✏️ {battue.zone_geojson ? 'Retracer la zone' : 'Tracer la zone'}
           </button>
         )}
@@ -273,8 +383,9 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
         <button type="button" className="bouton-petit" onClick={recentrer}>⤢ Recentrer</button>
       </div>
       {trace && <p className="message info">Touche la carte pour poser les coins de la zone ({trace.length} point(s)), puis « Valider la zone ».</p>}
+      {ajoutPark && <p className="message info">Touche la carte à l'emplacement du parking.</p>}
       {ajout && <p className="message info">Touche la carte pour placer chaque poste (numérotés à la suite). Appuie sur « Terminé » quand tu as fini.</p>}
-      <div ref={divRef} className={'carte-osm' + (ajout || trace ? ' ajout' : '')} />
+      <div ref={divRef} className={'carte-osm' + (ajout || ajoutPark || trace ? ' ajout' : '')} />
       <p className="message" style={{ marginTop: 4 }}>
         {postes.length} poste(s){peutModifier ? ' · glisse un numéro pour le déplacer' : ''}
       </p>
@@ -288,6 +399,20 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
           maj={(patch) => maj(poste.id, patch)}
           supprimer={() => supprimer(poste.id)}
           fermer={() => setSelId(null)}
+        />
+      )}
+
+      {parkings.find((k) => k.id === selPark) && (
+        <PanneauParking
+          key={selPark}
+          parking={parkings.find((k) => k.id === selPark)}
+          postes={postes}
+          dessertes={dessertes}
+          peutModifier={peutModifier}
+          majParking={(patch) => majParking(selPark, patch)}
+          basculer={(posteId, actif) => basculerDesserte(selPark, posteId, actif)}
+          supprimer={() => supprimerParking(selPark)}
+          fermer={() => setSelPark(null)}
         />
       )}
 
@@ -319,10 +444,21 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
       )}
 
       <ul className="liste" style={{ marginTop: 8 }}>
+        {parkings.map((k) => (
+          <li key={k.id}>
+            <button type="button" className="ligne-bouton" style={{ borderLeft: `6px solid ${k.couleur || '#999'}` }} onClick={() => {
+              setSelId(null); setSelPark(k.id)
+              if (k.lat != null && mapRef.current) mapRef.current.setView([k.lat, k.lng], Math.max(mapRef.current.getZoom(), 16))
+            }}>
+              <span>🅿️ {k.nom} · {dessertes.filter((d) => d.parking_id === k.id).length} poste(s)</span>
+              <span>›</span>
+            </button>
+          </li>
+        ))}
         {postes.map((p) => (
           <li key={p.id}>
             <button type="button" className="ligne-bouton" onClick={() => {
-              setSelId(p.id)
+              setSelPark(null); setSelId(p.id)
               if (p.lat != null && mapRef.current) mapRef.current.setView([p.lat, p.lng], Math.max(mapRef.current.getZoom(), 16))
             }}>
               <span>Poste {p.numero}{nomConseil(p.conseil_id) ? ` · ${nomConseil(p.conseil_id)}` : ''}</span>
@@ -384,6 +520,55 @@ function PanneauPoste({ poste, conseils, peutModifier, maj, supprimer, fermer })
         {peutModifier && (
           <button type="button" className="lien-mini" style={{ textAlign: 'left' }} onClick={supprimer}>
             Supprimer ce poste
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PanneauParking({ parking, postes, dessertes, peutModifier, majParking, basculer, supprimer, fermer }) {
+  const [nom, setNom] = useState(parking.nom)
+  const miens = new Set(dessertes.filter((d) => d.parking_id === parking.id).map((d) => d.poste_id))
+  const autre = (posteId) => dessertes.find((d) => d.poste_id === posteId && d.parking_id !== parking.id)
+
+  return (
+    <div className="bloc" style={{ borderLeft: `6px solid ${parking.couleur || '#999'}` }}>
+      <div className="bloc-titre">
+        <strong>{parking.nom}</strong>
+        <button type="button" className="lien-mini" style={{ color: 'var(--ink-soft)' }} onClick={fermer}>Fermer</button>
+      </div>
+      <div className="champ-groupe">
+        <div className="champ">
+          <label>Nom du parking</label>
+          <input
+            value={nom}
+            disabled={!peutModifier}
+            onChange={(e) => setNom(e.target.value)}
+            onBlur={() => { if (nom.trim() && nom !== parking.nom) majParking({ nom: nom.trim() }) }}
+          />
+        </div>
+        <div className="champ">
+          <label>Postes desservis par ce parking</label>
+          {postes.length === 0 && <p className="message">Place d'abord des postes sur la carte.</p>}
+          <div className="cases-postes">
+            {postes.map((p) => (
+              <label key={p.id} className="case" style={{ opacity: autre(p.id) ? 0.55 : 1 }}>
+                <input
+                  type="checkbox"
+                  disabled={!peutModifier}
+                  checked={miens.has(p.id)}
+                  onChange={(e) => basculer(p.id, e.target.checked)}
+                />
+                {p.numero}
+              </label>
+            ))}
+          </div>
+          <p className="message">Un poste n'a qu'un parking : cocher un poste déjà pris le déplace ici.</p>
+        </div>
+        {peutModifier && (
+          <button type="button" className="lien-mini" style={{ textAlign: 'left' }} onClick={supprimer}>
+            Supprimer ce parking
           </button>
         )}
       </div>
