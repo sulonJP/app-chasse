@@ -127,7 +127,7 @@
 .carte-osm { height: 340px; border-radius: 10px; border: 1px solid var(--line); z-index: 0; }
 .carte-osm.ajout { cursor: crosshair; outline: 2px solid var(--warn); }
 .pin { width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.45); }
-.pin.sel { background: var(--warn); }
+.pin.sel { box-shadow: 0 0 0 3px rgba(0,0,0,.55), 0 0 0 6px #fff; transform: scale(1.15); }
 .champ textarea, .champ select { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font-size: 0.95rem; color: var(--ink); font-family: inherit; }
 
 .parking-pin { border-radius: 6px; }

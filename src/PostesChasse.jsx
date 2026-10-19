@@ -230,7 +230,7 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
       const el = document.createElement('div')
       el.className = 'pin' + (p.id === selId ? ' sel' : '')
       el.textContent = p.numero
-      if (p.id !== selId) {
+      {
         const d = dessertes.find((x) => x.poste_id === p.id)
         const k = d && parkings.find((x) => x.id === d.parking_id)
         if (k?.couleur) { el.style.background = clair(k.couleur); el.style.borderColor = k.couleur; el.style.color = '#222' }
@@ -266,7 +266,7 @@ export default function PostesChasse({ battue, chasseId, conseils, peutModifier,
       const el = document.createElement('div')
       el.className = 'pin parking-pin' + (k.id === selPark ? ' sel' : '')
       el.textContent = 'P'
-      if (k.id !== selPark && k.couleur) { el.style.background = k.couleur }
+      if (k.couleur) { el.style.background = k.couleur }
       const marker = L.marker([k.lat, k.lng], {
         icon: L.divIcon({ className: '', html: el, iconSize: [30, 30], iconAnchor: [15, 15] }),
         draggable: peutModifier,
