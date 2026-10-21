@@ -22,17 +22,38 @@ export default function GererChasse({ userId }) {
   const [erreur, setErreur] = useState('')
   const [code, setCode] = useState('')
 
-  async function rejoindre(e) {
-    e.preventDefault()
+  // Accepte le code seul, « CHASSEAPP:journee=… » ou l'adresse complète du QR.
+  function extraireCode(texte) {
+    const t = texte.trim()
+    try { const u = new URL(t); const c = u.searchParams.get('journee'); if (c) return c } catch (e) { /* pas une adresse */ }
+    return t.replace(/^CHASSEAPP:journee=/, '')
+  }
+
+  async function rejoindreAvec(texte) {
     setErreur('')
-    const texte = code.trim().replace(/^CHASSEAPP:journee=/, '')
-    if (!texte) return
-    const { data, error } = await supabase.rpc('rejoindre_journee', { p_code: texte })
+    const c = extraireCode(texte)
+    if (!c) return
+    const { data, error } = await supabase.rpc('rejoindre_journee', { p_code: c })
     if (error) return setErreur(error.message)
     setCode('')
     await charger()
     setChoisie(data)
   }
+
+  function rejoindre(e) {
+    e.preventDefault()
+    rejoindreAvec(code)
+  }
+
+  // Arrivée par le QR (scanné avec l'appareil photo du téléphone) : on rejoint automatiquement.
+  useEffect(() => {
+    let c = null
+    try { c = localStorage.getItem('codeJournee') } catch (e) { /* ignore */ }
+    if (!c) return
+    try { localStorage.removeItem('codeJournee') } catch (e) { /* ignore */ }
+    rejoindreAvec(c)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const charger = useCallback(async () => {
     const { data, error } = await supabase.from('chasses').select('*').order('created_at')

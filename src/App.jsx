@@ -3,6 +3,15 @@ import { supabase } from './supabaseClient'
 import GererChasse from './GererChasse'
 import './App.css'
 
+// Le QR de la journée ouvre l'app avec « ?journee=CODE » : on garde le code pendant la connexion.
+try {
+  const codeJournee = new URLSearchParams(window.location.search).get('journee')
+  if (codeJournee) {
+    localStorage.setItem('codeJournee', codeJournee)
+    window.history.replaceState({}, '', window.location.pathname)
+  }
+} catch (e) { /* ignore */ }
+
 export default function App() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)

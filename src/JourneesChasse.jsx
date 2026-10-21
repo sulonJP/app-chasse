@@ -52,8 +52,11 @@ export default function JourneesChasse({ chasseId, peutModifier }) {
       </ul>
       {peutModifier && (
         <form onSubmit={creer} className="champ-groupe" style={{ marginTop: 10 }}>
-          <div className="rangee">
+          <div className="champ">
+            <label>Date de la journée</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+          </div>
+          <div className="rangee">
             <input type="number" min="0" step="0.5" value={chapeau} onChange={(e) => setChapeau(e.target.value)} placeholder="Chapeau (€)" />
             <button type="submit" className="bouton-petit">+ Journée</button>
           </div>
@@ -72,7 +75,7 @@ function DetailJournee({ journee, chasseId, peutModifier, retour, recharger }) {
   const [erreur, setErreur] = useState('')
   const [chapeau, setChapeau] = useState(String(journee.montant_chapeau ?? 0))
   const qrRef = useRef(null)
-  const texteQr = 'CHASSEAPP:journee=' + journee.code_qr
+  const texteQr = window.location.origin + '/?journee=' + journee.code_qr
 
   const charger = useCallback(async () => {
     const b = await supabase.from('battues').select('*').eq('chasse_id', chasseId).order('created_at')
@@ -145,7 +148,7 @@ function DetailJournee({ journee, chasseId, peutModifier, retour, recharger }) {
         <strong>QR du matin</strong>
         <div ref={qrRef} style={{ display: 'flex', justifyContent: 'center', margin: '10px 0' }} />
         <p className="message">Code de secours : <strong>{journee.code_qr}</strong></p>
-        <p className="message">Les chasseurs le scannent (ou saisissent le code) pour rejoindre la journée.</p>
+        <p className="message">Les chasseurs scannent ce QR avec l'appareil photo de leur téléphone : l'app s'ouvre et ils rejoignent la journée (après connexion).</p>
       </div>
 
       {peutModifier && (
