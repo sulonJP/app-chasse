@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import BattuesChasse from './BattuesChasse'
 import JourneesChasse from './JourneesChasse'
+import MesJournees from './MesJournees'
 
 const SAISON = '2026-2027'
 
@@ -87,6 +88,7 @@ export default function GererChasse({ userId }) {
 
   return (
     <div>
+      <MesJournees userId={userId} chasses={chasses} />
       <h2 className="h2">Mes chasses</h2>
       {chasses.length === 0 && <p className="message">Aucune chasse pour l'instant.</p>}
       <ul className="liste">
