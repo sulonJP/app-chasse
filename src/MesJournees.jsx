@@ -81,7 +81,12 @@ export default function MesJournees({ userId, chasses }) {
   )
 }
 
-function VueJournee({ journee, part, chasseNom, retour }) {
+function VueJournee({ journee: journeeInit, part: partInit, chasseNom, retour }) {
+  const [journee, setJournee] = useState(journeeInit)
+  const [part, setPart] = useState(partInit)
+  const [numero, setNumero] = useState(partInit.numero_tire ?? '')
+  const [modif, setModif] = useState(!partInit.numero_tire)
+  const [info, setInfo] = useState('')
   const [blocs, setBlocs] = useState([])
   const [pos, setPos] = useState(null)
   const [suivi, setSuivi] = useState(false)
@@ -90,6 +95,10 @@ function VueJournee({ journee, part, chasseNom, retour }) {
   const watchRef = useRef(null)
 
   const charger = useCallback(async () => {
+    const jr = await supabase.from('journees').select('*').eq('id', journeeInit.id).single()
+    const pr = await supabase.from('journee_participants').select('*').eq('id', partInit.id).single()
+    if (jr.data) setJournee(jr.data)
+    if (pr.data) { setPart(pr.data); setNumero((n) => (pr.data.numero_tire && !n ? pr.data.numero_tire : n)) }
     const jb = await supabase.from('journee_battues').select('*').eq('journee_id', journee.id).order('ordre')
     if (jb.error) return setErreur(jb.error.message)
     const battues = jb.data.length ? (await supabase.from('battues').select('*').in('id', jb.data.map((x) => x.battue_id))).data : []
@@ -113,9 +122,25 @@ function VueJournee({ journee, part, chasseNom, retour }) {
       }
     }).filter((x) => x.battue))
     setChargee(true)
-  }, [journee.id, part.id])
+  }, [journeeInit.id, partInit.id])
 
   useEffect(() => { charger() }, [charger])
+  // Tant que les postes ne sont pas publiés, on rafraîchit toutes les 10 secondes.
+  useEffect(() => {
+    if (journee.postes_publies) return undefined
+    const t = setInterval(charger, 10000)
+    return () => clearInterval(t)
+  }, [journee.postes_publies, charger])
+
+  async function validerNumero(e) {
+    e.preventDefault()
+    setErreur(''); setInfo('')
+    const { error } = await supabase.rpc('encoder_mon_numero', { p_journee: journee.id, p_numero: numero })
+    if (error) return setErreur(error.message)
+    setModif(false)
+    setInfo('Numéro enregistré ✓')
+    charger()
+  }
   useEffect(() => () => { if (watchRef.current != null) navigator.geolocation.clearWatch(watchRef.current) }, [])
 
   function activerPosition() {
@@ -138,8 +163,26 @@ function VueJournee({ journee, part, chasseNom, retour }) {
         <button type="button" className="bouton-petit" onClick={activerPosition}>{suivi ? '📍 Position active' : '📍 Activer ma position'}</button>
         <button type="button" className="bouton-petit" onClick={charger}>↻ Actualiser</button>
       </div>
-      {chargee && blocs.length === 0 && <p className="message">Aucune battue n'est encore prévue pour cette journée.</p>}
-      {blocs.map((b) => (
+      {!journee.postes_publies && (
+        <div className="bloc">
+          <strong>Mon numéro tiré au rond</strong>
+          {modif ? (
+            <form onSubmit={validerNumero} className="rangee" style={{ marginTop: 8 }}>
+              <input type="number" min="1" value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="Mon numéro" />
+              <button type="submit" className="bouton-petit">Valider</button>
+            </form>
+          ) : (
+            <p style={{ margin: '8px 0' }}>
+              <span style={{ fontSize: '1.6rem', fontWeight: 700 }}>n° {part.numero_tire}</span> ✓
+              <button type="button" className="lien-mini" style={{ marginLeft: 10, color: 'var(--ink-soft)' }} onClick={() => setModif(true)}>Modifier</button>
+            </p>
+          )}
+          <p className="message">Ton poste s'affichera ici quand l'organisateur aura publié les postes.</p>
+          {info && <p className="message info">{info}</p>}
+        </div>
+      )}
+      {journee.postes_publies && chargee && blocs.length === 0 && <p className="message">Aucune battue n'est encore prévue pour cette journée.</p>}
+      {journee.postes_publies && blocs.map((b) => (
         <div key={b.id} className="bloc">
           <strong>Battue {[b.battue.numero && `N° ${b.battue.numero}`, b.battue.nom].filter(Boolean).join(' — ')}</strong>
           {b.poste ? (

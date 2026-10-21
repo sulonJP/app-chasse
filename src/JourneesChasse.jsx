@@ -168,6 +168,16 @@ function DetailJournee({ journee, chasseId, peutModifier, retour, recharger }) {
     if (error) return setErreur(error.message)
     charger()
   }
+  const presentsSansNumero = parts.filter((p) => p.present && !p.numero_tire)
+  const doublons = [...new Set(parts.map((p) => p.numero_tire).filter((n, i, t) => n && t.indexOf(n) !== i))]
+
+  async function publier(valeur) {
+    setErreur('')
+    const { error } = await supabase.from('journees').update({ postes_publies: valeur }).eq('id', journee.id)
+    if (error) return setErreur(error.message)
+    recharger()
+  }
+
   const presents = parts.filter((p) => p.present).length
   const payes = parts.filter((p) => p.chapeau_paye).length
   const montant = Number(journee.montant_chapeau) || 0
@@ -208,6 +218,7 @@ function DetailJournee({ journee, chasseId, peutModifier, retour, recharger }) {
       </div>
 
       <h3 className="h3">Le rond et le chapeau</h3>
+      <p className="message">Les chasseurs encodent eux-mêmes leur numéro depuis leur téléphone ; tu encodes seulement ceux qui ne peuvent pas.</p>
       <p className="message">{presents} présent(s) · chapeau payé : {payes} × {montant} € = {payes * montant} €</p>
       <ul className="liste">
         {personnes.map(({ p, nom }) => (
@@ -228,6 +239,21 @@ function DetailJournee({ journee, chasseId, peutModifier, retour, recharger }) {
           </li>
         ))}
       </ul>
+      {peutModifier && (
+        <div className="bloc">
+          <strong>Publication des postes</strong>
+          <p className="message">
+            {presentsSansNumero.length > 0
+              ? `En attente d'un numéro : ${presentsSansNumero.map((p) => nomDe(p)).join(', ')}.`
+              : 'Tous les présents ont un numéro.'}
+          </p>
+          {doublons.length > 0 && <p className="message erreur">Numéro en double : {doublons.join(', ')}</p>}
+          <p className="message">{journee.postes_publies ? '✅ Postes publiés : les chasseurs voient leur poste.' : 'Les chasseurs ne voient pas encore leur poste.'}</p>
+          <button type="button" className="bouton-petit" onClick={() => publier(!journee.postes_publies)}>
+            {journee.postes_publies ? 'Reprendre la publication' : 'Publier les postes à tous'}
+          </button>
+        </div>
+      )}
       {duJour.length > 0 && <h3 className="h3">Les postes de la journée</h3>}
       {[...duJour].sort((x, y) => x.ordre - y.ordre).map((jb) => {
         const b = battues.find((x) => x.id === jb.battue_id)
