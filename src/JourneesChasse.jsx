@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabaseClient'
+import AffectationBattue from './AffectationBattue'
 
 const aujourdhui = () => new Date().toISOString().slice(0, 10)
 const codeAleatoire = () => 'J' + Math.random().toString(36).slice(2, 8).toUpperCase() + Date.now().toString(36).toUpperCase()
@@ -74,6 +75,7 @@ function DetailJournee({ journee, chasseId, peutModifier, retour, recharger }) {
   const [parts, setParts] = useState([])
   const [erreur, setErreur] = useState('')
   const [chapeau, setChapeau] = useState(String(journee.montant_chapeau ?? 0))
+  const [nomLibre, setNomLibre] = useState('')
   const qrRef = useRef(null)
   const texteQr = window.location.origin + '/?journee=' + journee.code_qr
 
@@ -116,11 +118,28 @@ function DetailJournee({ journee, chasseId, peutModifier, retour, recharger }) {
     recharger()
   }
 
-  async function majPart(userId, patch) {
+  async function majPart(id, patch) {
     setErreur('')
-    const { error } = await supabase.from('journee_participants')
-      .upsert({ journee_id: journee.id, user_id: userId, ...patch }, { onConflict: 'journee_id,user_id' })
+    const { error } = await supabase.from('journee_participants').update(patch).eq('id', id)
     if (error) return setErreur(error.message)
+    charger()
+  }
+
+  async function ajouterMembre(userId) {
+    setErreur('')
+    const { error } = await supabase.from('journee_participants').insert({ journee_id: journee.id, user_id: userId })
+    if (error) return setErreur(error.message)
+    charger()
+  }
+
+  async function ajouterSansApp(e) {
+    e.preventDefault()
+    setErreur('')
+    if (!nomLibre.trim()) return
+    const { error } = await supabase.from('journee_participants')
+      .insert({ journee_id: journee.id, nom_libre: nomLibre.trim(), present: true })
+    if (error) return setErreur(error.message)
+    setNomLibre('')
     charger()
   }
 
@@ -134,14 +153,18 @@ function DetailJournee({ journee, chasseId, peutModifier, retour, recharger }) {
   // Un même utilisateur peut être organisateur ET chasseur : une seule ligne.
   const uniques = []
   membres.forEach((m) => { if (!uniques.find((x) => x.user_id === m.user_id)) uniques.push(m) })
-  const partDe = (id) => parts.find((p) => p.user_id === id)
-  // Seuls ceux qui ont rejoint (ou été ajoutés) cette journée figurent dans le rond.
-  const personnes = uniques.filter((m) => partDe(m.user_id))
-  const absents = uniques.filter((m) => !partDe(m.user_id))
+  const nomDe = (p) => {
+    if (!p.user_id) return p.nom_libre || '?'
+    const m = uniques.find((x) => x.user_id === p.user_id)
+    return m ? `${m.prenom} ${m.nom}` : '?'
+  }
+  // Le rond : tous ceux qui ont rejoint la journée, ou que l'organisateur a inscrits à la main.
+  const personnes = parts.map((p) => ({ p, nom: nomDe(p) })).sort((x, y) => x.nom.localeCompare(y.nom))
+  const absents = uniques.filter((m) => !parts.some((p) => p.user_id === m.user_id))
 
-  async function retirerDeLaJournee(userId) {
+  async function retirerDeLaJournee(id) {
     setErreur('')
-    const { error } = await supabase.from('journee_participants').delete().eq('journee_id', journee.id).eq('user_id', userId)
+    const { error } = await supabase.from('journee_participants').delete().eq('id', id)
     if (error) return setErreur(error.message)
     charger()
   }
@@ -187,25 +210,51 @@ function DetailJournee({ journee, chasseId, peutModifier, retour, recharger }) {
       <h3 className="h3">Le rond et le chapeau</h3>
       <p className="message">{presents} présent(s) · chapeau payé : {payes} × {montant} € = {payes * montant} €</p>
       <ul className="liste">
-        {personnes.map((m) => {
-          const p = partDe(m.user_id)
-          return (
-            <li key={m.user_id} className="quota" style={{ flexWrap: 'wrap' }}>
-              <span style={{ flex: '1 1 140px' }}>{m.prenom} {m.nom}</span>
-              <label className="case">
-                <input type="checkbox" disabled={!peutModifier} checked={!!p?.present} onChange={(e) => majPart(m.user_id, { present: e.target.checked })} />
-                Présent
-              </label>
-              <label className="case">
-                <input type="checkbox" disabled={!peutModifier} checked={!!p?.chapeau_paye} onChange={(e) => majPart(m.user_id, { chapeau_paye: e.target.checked })} />
-                Chapeau
-              </label>
-              <NumeroTire valeur={p?.numero_tire ?? ''} disabled={!peutModifier} enregistrer={(v) => majPart(m.user_id, { numero_tire: v || null })} />
-              {peutModifier && <button type="button" className="lien-mini" onClick={() => retirerDeLaJournee(m.user_id)}>Retirer</button>}
-            </li>
-          )
-        })}
+        {personnes.map(({ p, nom }) => (
+          <li key={p.id} className="quota" style={{ flexWrap: 'wrap' }}>
+            <span style={{ flex: '1 1 140px' }}>
+              {nom}{!p.user_id && <small style={{ opacity: 0.7 }}> (inscrit à la main)</small>}
+            </span>
+            <label className="case">
+              <input type="checkbox" disabled={!peutModifier} checked={!!p.present} onChange={(e) => majPart(p.id, { present: e.target.checked })} />
+              Présent
+            </label>
+            <label className="case">
+              <input type="checkbox" disabled={!peutModifier} checked={!!p.chapeau_paye} onChange={(e) => majPart(p.id, { chapeau_paye: e.target.checked })} />
+              Chapeau
+            </label>
+            <NumeroTire valeur={p.numero_tire ?? ''} disabled={!peutModifier} enregistrer={(v) => majPart(p.id, { numero_tire: v || null })} />
+            {peutModifier && <button type="button" className="lien-mini" onClick={() => retirerDeLaJournee(p.id)}>Retirer</button>}
+          </li>
+        ))}
       </ul>
+      {duJour.length > 0 && <h3 className="h3">Les postes de la journée</h3>}
+      {[...duJour].sort((x, y) => x.ordre - y.ordre).map((jb) => {
+        const b = battues.find((x) => x.id === jb.battue_id)
+        return b ? (
+          <AffectationBattue
+            key={jb.id}
+            journee={journee}
+            jb={jb}
+            battue={b}
+            parts={parts}
+            nomDe={nomDe}
+            peutModifier={peutModifier}
+            rechargerJb={charger}
+          />
+        ) : null
+      })}
+
+      {peutModifier && (
+        <form onSubmit={ajouterSansApp} className="bloc">
+          <strong>Inscrire un chasseur à la main</strong>
+          <p className="message">Pour quelqu'un sans téléphone, sans caméra ou sans compte.</p>
+          <div className="rangee">
+            <input value={nomLibre} onChange={(e) => setNomLibre(e.target.value)} placeholder="Prénom Nom" />
+            <button type="submit" className="bouton-petit">+ Inscrire</button>
+          </div>
+        </form>
+      )}
       {peutModifier && absents.length > 0 && (
         <div className="bloc">
           <strong>Ajouter à cette journée</strong>
@@ -214,7 +263,7 @@ function DetailJournee({ journee, chasseId, peutModifier, retour, recharger }) {
             {absents.map((m) => (
               <li key={m.user_id} className="quota">
                 <span>{m.prenom} {m.nom}{m.role === 'chasseur' && !m.habituel ? ' (invité)' : ''}</span>
-                <button type="button" className="bouton-petit" onClick={() => majPart(m.user_id, {})}>+ Ajouter</button>
+                <button type="button" className="bouton-petit" onClick={() => ajouterMembre(m.user_id)}>+ Ajouter</button>
               </li>
             ))}
           </ul>
