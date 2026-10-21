@@ -223,9 +223,14 @@ function EcranConnecte({ profile, userId }) {
 
   return (
     <>
-      <p className="message info" style={{ marginBottom: 8 }}>
-        Connecté : {profile.prenom} {profile.nom}
-      </p>
+      <div className="rangee" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+        <p className="message info" style={{ margin: 0 }}>
+          Connecté : {profile.prenom} {profile.nom}
+        </p>
+        <button type="button" className="lien-mini" style={{ color: 'var(--ink-soft)', textDecoration: 'underline' }} onClick={seDeconnecter}>
+          Se déconnecter
+        </button>
+      </div>
       <GererChasse userId={userId} />
       <button type="button" className="lien" onClick={seDeconnecter}>
         Se déconnecter
