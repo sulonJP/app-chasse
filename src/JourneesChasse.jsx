@@ -132,9 +132,19 @@ function DetailJournee({ journee, chasseId, peutModifier, retour, recharger }) {
   }
 
   // Un même utilisateur peut être organisateur ET chasseur : une seule ligne.
-  const personnes = []
-  membres.forEach((m) => { if (!personnes.find((x) => x.user_id === m.user_id)) personnes.push(m) })
+  const uniques = []
+  membres.forEach((m) => { if (!uniques.find((x) => x.user_id === m.user_id)) uniques.push(m) })
   const partDe = (id) => parts.find((p) => p.user_id === id)
+  // Seuls ceux qui ont rejoint (ou été ajoutés) cette journée figurent dans le rond.
+  const personnes = uniques.filter((m) => partDe(m.user_id))
+  const absents = uniques.filter((m) => !partDe(m.user_id))
+
+  async function retirerDeLaJournee(userId) {
+    setErreur('')
+    const { error } = await supabase.from('journee_participants').delete().eq('journee_id', journee.id).eq('user_id', userId)
+    if (error) return setErreur(error.message)
+    charger()
+  }
   const presents = parts.filter((p) => p.present).length
   const payes = parts.filter((p) => p.chapeau_paye).length
   const montant = Number(journee.montant_chapeau) || 0
@@ -191,10 +201,25 @@ function DetailJournee({ journee, chasseId, peutModifier, retour, recharger }) {
                 Chapeau
               </label>
               <NumeroTire valeur={p?.numero_tire ?? ''} disabled={!peutModifier} enregistrer={(v) => majPart(m.user_id, { numero_tire: v || null })} />
+              {peutModifier && <button type="button" className="lien-mini" onClick={() => retirerDeLaJournee(m.user_id)}>Retirer</button>}
             </li>
           )
         })}
       </ul>
+      {peutModifier && absents.length > 0 && (
+        <div className="bloc">
+          <strong>Ajouter à cette journée</strong>
+          <p className="message">Les habituels ne sont pas inscrits d'office : ajoute ceux qui chassent aujourd'hui.</p>
+          <ul className="liste">
+            {absents.map((m) => (
+              <li key={m.user_id} className="quota">
+                <span>{m.prenom} {m.nom}{m.role === 'chasseur' && !m.habituel ? ' (invité)' : ''}</span>
+                <button type="button" className="bouton-petit" onClick={() => majPart(m.user_id, {})}>+ Ajouter</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {peutModifier && (
         <button type="button" className="lien-mini" style={{ marginTop: 12 }} onClick={supprimerJournee}>Supprimer cette journée</button>
       )}

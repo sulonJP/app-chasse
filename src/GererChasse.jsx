@@ -309,29 +309,48 @@ function Membres({ chasseId, userId }) {
 
   const peutRetirer = (m) => estOrganisateur && !m.est_principal && (m.role === 'chasseur' || estPrincipal)
 
-  const groupe = (titre, r) => (
-    <>
-      <h3 className="h3">{titre}</h3>
-      <ul className="liste">
-        {membres.filter((m) => m.role === r).map((m) => (
-          <li key={m.user_id + m.role} className="quota">
-            <span>
-              {m.prenom} {m.nom}{m.est_principal ? ' ★ principal' : ''}
-              {m.email && <small style={{ display: 'block', opacity: 0.7 }}>{m.email}</small>}
-            </span>
-            {peutRetirer(m) && (
-              <button type="button" className="lien-mini" onClick={() => retirer(m)}>Retirer</button>
-            )}
-          </li>
-        ))}
-      </ul>
-    </>
-  )
+  async function changerHabituel(m, valeur) {
+    setErreur(''); setInfo('')
+    const { error } = await supabase.rpc('definir_habituel', { p_chasse: chasseId, p_user: m.user_id, p_habituel: valeur })
+    if (error) return setErreur(error.message)
+    charger()
+  }
+
+  const groupe = (titre, filtre, vide) => {
+    const liste = membres.filter(filtre)
+    return (
+      <>
+        <h3 className="h3">{titre}</h3>
+        {liste.length === 0 && vide && <p className="message">{vide}</p>}
+        <ul className="liste">
+          {liste.map((m) => (
+            <li key={m.user_id + m.role} className="quota">
+              <span>
+                {m.prenom} {m.nom}{m.est_principal ? ' ★ principal' : ''}
+                {m.email && <small style={{ display: 'block', opacity: 0.7 }}>{m.email}</small>}
+              </span>
+              <span>
+                {estOrganisateur && m.role === 'chasseur' && (
+                  <button type="button" className="lien-mini" style={{ color: 'var(--accent-dark)', marginRight: 8 }} onClick={() => changerHabituel(m, !m.habituel)}>
+                    {m.habituel ? 'Plus habituel' : 'Passer en habituel'}
+                  </button>
+                )}
+                {peutRetirer(m) && (
+                  <button type="button" className="lien-mini" onClick={() => retirer(m)}>Retirer</button>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </>
+    )
+  }
 
   return (
     <div>
-      {groupe('Organisateurs', 'organisateur')}
-      {groupe('Chasseurs habituels', 'chasseur')}
+      {groupe('Organisateurs', (m) => m.role === 'organisateur')}
+      {groupe('Chasseurs habituels', (m) => m.role === 'chasseur' && m.habituel, 'Aucun pour l\'instant.')}
+      {groupe('Invités (arrivés par un QR)', (m) => m.role === 'chasseur' && !m.habituel)}
       {estOrganisateur && (
         <form onSubmit={ajouter} className="champ-groupe" style={{ marginTop: 10 }}>
           <div className="rangee">
