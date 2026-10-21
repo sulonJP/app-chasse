@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import BattuesChasse from './BattuesChasse'
+import JourneesChasse from './JourneesChasse'
 
 const SAISON = '2026-2027'
 
@@ -19,6 +20,19 @@ export default function GererChasse({ userId }) {
   const [choisie, setChoisie] = useState(null)
   const [nom, setNom] = useState('')
   const [erreur, setErreur] = useState('')
+  const [code, setCode] = useState('')
+
+  async function rejoindre(e) {
+    e.preventDefault()
+    setErreur('')
+    const texte = code.trim().replace(/^CHASSEAPP:journee=/, '')
+    if (!texte) return
+    const { data, error } = await supabase.rpc('rejoindre_journee', { p_code: texte })
+    if (error) return setErreur(error.message)
+    setCode('')
+    await charger()
+    setChoisie(data)
+  }
 
   const charger = useCallback(async () => {
     const { data, error } = await supabase.from('chasses').select('*').order('created_at')
@@ -69,6 +83,13 @@ export default function GererChasse({ userId }) {
           <input value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex. Chasse de la Haute Fagne" />
         </div>
         <button type="submit" className="bouton-principal">Créer la chasse</button>
+      </form>
+      <form onSubmit={rejoindre} className="champ-groupe" style={{ marginTop: 16 }}>
+        <div className="champ">
+          <label>Rejoindre une journée (code du QR)</label>
+          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Ex. JABC123XYZ" />
+        </div>
+        <button type="submit" className="bouton-petit">Rejoindre</button>
         {erreur && <p className="message erreur">{erreur}</p>}
       </form>
     </div>
@@ -144,6 +165,7 @@ function DetailChasse({ chasse, userId, retour }) {
         <button type="submit" className="bouton-petit">+ Conseil</button>
       </form>
       <BattuesChasse chasseId={chasse.id} conseils={conseils} peutModifier={estOrg} />
+      <JourneesChasse chasseId={chasse.id} peutModifier={estOrg} />
       {erreur && <p className="message erreur">{erreur}</p>}
     </div>
   )
